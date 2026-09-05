@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(SQLite3 REQUIRED)
+
 # --------------------------------------------------
 # Core library
 # --------------------------------------------------
@@ -16,11 +18,13 @@ add_library(medical_core
     src/User.cpp
     src/Study.cpp
     src/FileManager.cpp
+    src/Database.cpp
 )
 
 target_include_directories(medical_core
     PUBLIC
     ${PROJECT_SOURCE_DIR}/include
+    SQLite::SQLite3
 )
 
 target_compile_options(medical_core
