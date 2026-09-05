@@ -5,7 +5,7 @@
 
 class Patient {
 public:
-    Patient(int id, std::string name, int age);
+    Patient(int id, std::string const& name, int age);
 
     int get_id() const;
     std::string get_name() const;

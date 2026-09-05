@@ -1,6 +1,6 @@
 #include "User.h"
 
-User::User(int id, std::string username, std::string role)
+User::User(int id, std::string const& username, std::string const& role)
     : id{id}, username{username}, role{role} {}
 
 int User::get_id() const {

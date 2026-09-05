@@ -8,7 +8,7 @@
 
 class FileManager {
 public:
-    FileManager(std::string filename);
+    FileManager(std::string const& filename);
 
     void save_patient(Patient const& patient) const;
 

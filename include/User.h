@@ -5,7 +5,7 @@
 
 class User {
 public:
-    User(int id, std::string username, std::string role);
+    User(int id, std::string const& username, std::string const& role);
 
     int get_id() const;
     std::string get_username() const;
