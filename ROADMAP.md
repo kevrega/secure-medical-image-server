@@ -10,7 +10,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Add file handling
 - Use CMake for building the project
 
-## Phase 2 - Testing ☐
+## Phase 2 - Testing 🗹
 
 - Add unit tests
 - Add integration tests
