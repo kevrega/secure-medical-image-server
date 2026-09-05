@@ -1,6 +1,6 @@
 #include "Study.h"
 
-Study::Study(int id, int patient_id, std::string description)
+Study::Study(int id, int patient_id, std::string const& description)
     : id{id}, patient_id{patient_id}, description{description} {}
 
 int Study::get_id() const {

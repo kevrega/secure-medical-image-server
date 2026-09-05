@@ -5,7 +5,7 @@
 
 class Study {
 public:
-    Study(int id, int patient_id, std::string description);
+    Study(int id, int patient_id, std::string const& description);
 
     int get_id() const;
     int get_patient_id() const;
