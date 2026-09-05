@@ -2,7 +2,7 @@
 
 This project will be developed step by step, starting with the core C++ backend.
 
-## Phase 1 - Core C++ Backend ⬜
+## Phase 1 - Core C++ Backend 🗹
 
 - Set up the project structure
 - Build the main C++ application
