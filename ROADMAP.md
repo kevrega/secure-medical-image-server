@@ -17,7 +17,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Improve error handling
 - Add static analysis
 
-## Phase 3 - Database ☐
+## Phase 3 - Database 🗹
 
 - Add SQL database support
 - Store users, patients and study information
