@@ -70,3 +70,4 @@ Testing/
 
 # Runtime data
 data/patients.txt
+data/*.db
