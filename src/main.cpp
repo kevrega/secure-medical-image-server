@@ -1,22 +1,18 @@
 #include <iostream>
-#include <vector>
 
-#include "Patient.h"
-#include "FileManager.h"
+#include "Database.h"
 
 int main() {
-    FileManager manager{"data/patients.txt"};
+    Database db{"data/medical.db"};
+    db.createTables();
 
-    Patient patient{1, "John_Doe", 45};
+    auto patients = db.getPatients();
 
-    manager.save_patient(patient);
-
-    std::vector<Patient> patients{manager.load_patients()};
-
-    for (Patient const& p : patients) {
-        std::cout << p.get_id() << " "
-                  << p.get_name() << " "
-                  << p.get_age() << '\n';
+    for (auto const& patient : patients) {
+        std::cout
+            << patient.get_id() << " "
+            << patient.get_name() << " "
+            << patient.get_age() << '\n';
     }
 
     return 0;

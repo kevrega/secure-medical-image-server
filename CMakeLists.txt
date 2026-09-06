@@ -7,6 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# --------------------------------------------------
+# SQLite
+# --------------------------------------------------
+
 find_package(SQLite3 REQUIRED)
 
 # --------------------------------------------------
@@ -24,6 +28,10 @@ add_library(medical_core
 target_include_directories(medical_core
     PUBLIC
     ${PROJECT_SOURCE_DIR}/include
+)
+
+target_link_libraries(medical_core
+    PRIVATE
     SQLite::SQLite3
 )
 
@@ -78,6 +86,7 @@ add_executable(unit_tests
     tests/test_user.cpp
     tests/test_study.cpp
     tests/test_storage.cpp
+    tests/test_database.cpp
 )
 
 target_link_libraries(unit_tests
