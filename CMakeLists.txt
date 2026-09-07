@@ -23,6 +23,7 @@ add_library(medical_core
     src/Study.cpp
     src/FileManager.cpp
     src/Database.cpp
+    src/TcpServer.cpp
 )
 
 target_include_directories(medical_core
@@ -43,7 +44,7 @@ target_compile_options(medical_core
 )
 
 # --------------------------------------------------
-# Main application
+# Server application
 # --------------------------------------------------
 
 add_executable(med

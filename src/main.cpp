@@ -1,19 +1,19 @@
 #include <iostream>
 
-#include "Database.h"
+#include "TcpServer.h"
 
 int main() {
-    Database db{"data/medical.db"};
-    db.createTables();
 
-    auto patients = db.getPatients();
+    // Use this for server end
 
-    for (auto const& patient : patients) {
-        std::cout
-            << patient.get_id() << " "
-            << patient.get_name() << " "
-            << patient.get_age() << '\n';
-    }
+    TcpServer server{1337};
+    server.start();
 
     return 0;
 }
+
+/*
+    curl -X GET http://localhost:1337/patients
+    curl sends an HTTP GET request to server at localhost on port 1337
+    and asks for the /patients path
+*/

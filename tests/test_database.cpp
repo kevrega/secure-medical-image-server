@@ -59,7 +59,7 @@ TEST(DatabaseTest, DuplicatePatientIdThrows) {
     db.addPatient(1, "Kevin", 24);
 
     EXPECT_THROW(
-        db.addPatient(1, "John", 30),
+        db.addPatient(1, "Patient", 30),
         std::runtime_error
     );
 }
