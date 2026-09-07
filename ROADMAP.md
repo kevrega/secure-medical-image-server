@@ -23,7 +23,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Store users, patients and study information
 - Add basic create, read, update and delete operations
 
-## Phase 4 - Networking ☐
+## Phase 4 - Networking 🗹
 
 - Build a client-server structure
 - Add TCP socket communication
