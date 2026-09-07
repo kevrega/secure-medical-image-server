@@ -15,7 +15,7 @@ TEST(FileManagerTest, SavesAndLoadsPatient) {
 
     FileManager manager{filename};
 
-    Patient patient{1, "John_Doe", 45};
+    Patient patient{1, "Karl", 45};
 
     manager.save_patient(patient);
 
@@ -24,7 +24,7 @@ TEST(FileManagerTest, SavesAndLoadsPatient) {
     ASSERT_EQ(patients.size(), 1);
 
     EXPECT_EQ(patients[0].get_id(), 1);
-    EXPECT_EQ(patients[0].get_name(), "John_Doe");
+    EXPECT_EQ(patients[0].get_name(), "Karl");
     EXPECT_EQ(patients[0].get_age(), 45);
 
     // Clean up after the test.
@@ -39,7 +39,7 @@ TEST(FileManagerTest, SavesMultiplePatients) {
 
     FileManager manager{filename};
 
-    manager.save_patient(Patient{1, "John_Doe", 45});
+    manager.save_patient(Patient{1, "Karl", 45});
     manager.save_patient(Patient{2, "Jane_Doe", 37});
 
     std::vector<Patient> patients{manager.load_patients()};
@@ -47,7 +47,7 @@ TEST(FileManagerTest, SavesMultiplePatients) {
     ASSERT_EQ(patients.size(), 2);
 
     EXPECT_EQ(patients[0].get_id(), 1);
-    EXPECT_EQ(patients[0].get_name(), "John_Doe");
+    EXPECT_EQ(patients[0].get_name(), "Karl");
     EXPECT_EQ(patients[0].get_age(), 45);
 
     EXPECT_EQ(patients[1].get_id(), 2);
@@ -75,7 +75,7 @@ TEST(FileManagerTest, ThrowsForMalformedPatientData) {
 
     {
         std::ofstream file{filename};
-        file << "1 John_Doe banana\n";
+        file << "1 Karl banana\n";
     }
 
     FileManager manager{filename};
@@ -94,7 +94,7 @@ TEST(FileManagerTest, ThrowsWhenFileCannotBeOpenedForWriting) {
         "directory_that_does_not_exist/patients.txt"
     };
 
-    Patient patient{1, "John_Doe", 45};
+    Patient patient{1, "Karl", 45};
 
     EXPECT_THROW(
         manager.save_patient(patient),
