@@ -1,5 +1,5 @@
 /*
-Manual REST API tests with curl.
+Manual REST API tests with curl
 
 Start server first:
 

@@ -532,10 +532,10 @@ void TcpServer::start() {
             );
         }
 
-        // server_socket stays open while the server is running and listens for clients.
-        // accept() creates a separate client_socket for each connection.
+        // server_socket stays open while the server is running and listens for clients
+        // accept() creates a separate client_socket for each connection
         // This is a non-persistent TCP design:
-        // client_socket is closed after one request/response.
+        // client_socket is closed after one request/response
         close(client_socket);
     }
 }
