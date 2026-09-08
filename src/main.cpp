@@ -1,11 +1,15 @@
 #include <iostream>
 
 #include "TcpServer.h"
+#include "DicomReader.h"
 
 int main() {
 
-    // Use this for server end
+    // Read test DICOM file
+    DicomReader reader;
+    reader.readFile("data/test.dcm");
 
+    // Use this for server end
     TcpServer server{1337};
     server.start();
 

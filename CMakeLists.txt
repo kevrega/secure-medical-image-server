@@ -14,6 +14,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(SQLite3 REQUIRED)
 
 # --------------------------------------------------
+# DCMTK
+# --------------------------------------------------
+
+find_package(DCMTK REQUIRED)
+
+# --------------------------------------------------
 # Core library
 # --------------------------------------------------
 
@@ -24,16 +30,19 @@ add_library(medical_core
     src/FileManager.cpp
     src/Database.cpp
     src/TcpServer.cpp
+    src/DicomReader.cpp
 )
 
 target_include_directories(medical_core
     PUBLIC
     ${PROJECT_SOURCE_DIR}/include
+    ${DCMTK_INCLUDE_DIRS}
 )
 
 target_link_libraries(medical_core
     PRIVATE
     SQLite::SQLite3
+    ${DCMTK_LIBRARIES}
 )
 
 target_compile_options(medical_core
@@ -88,6 +97,7 @@ add_executable(unit_tests
     tests/test_study.cpp
     tests/test_storage.cpp
     tests/test_database.cpp
+    tests/test_dicomreader.cpp
 )
 
 target_link_libraries(unit_tests
