@@ -38,7 +38,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Store study and image information
 - Add basic image retrieval
 
-## Phase 6 - Multithreading ☐
+## Phase 6 - Multithreading 🗹
 
 - Allow multiple clients to connect
 - Add thread-safe operations
