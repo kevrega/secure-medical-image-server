@@ -20,6 +20,20 @@ find_package(SQLite3 REQUIRED)
 find_package(DCMTK REQUIRED)
 
 # --------------------------------------------------
+# THREADS
+# --------------------------------------------------
+
+# curl http://localhost:1337/patients &
+# curl http://localhost:1337/users &
+# curl http://localhost:1337/studies &
+# wait
+
+# Run three requests at the same time and wait for all of them to finish
+# Without wait prompt can come back before all curls are finished, and it just looks odd
+
+find_package(Threads REQUIRED)
+
+# --------------------------------------------------
 # Core library
 # --------------------------------------------------
 
@@ -43,6 +57,7 @@ target_link_libraries(medical_core
     PRIVATE
     SQLite::SQLite3
     ${DCMTK_LIBRARIES}
+    Threads::Threads
 )
 
 target_compile_options(medical_core
