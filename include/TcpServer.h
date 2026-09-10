@@ -12,6 +12,8 @@ public:
 private:
     int port; // Server listens from port
     int server_socket; // Communication endpoint
+    // Handle one connected client
+    void handleClient(int client_socket);
 };
 
 #endif
