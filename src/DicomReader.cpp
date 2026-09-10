@@ -20,7 +20,7 @@ void DicomReader::readFile(std::string const& filename) {
         return;
     }
 
-    // Get the actual DICOM dataset
+    // Get the real DICOM dataset
     DcmDataset* dataset = file.getDataset();
 
     OFString patient_id;
@@ -49,17 +49,13 @@ void DicomReader::readFile(std::string const& filename) {
     );
 
 
-    std::cout << "Patient ID: "
-              << patient_id << '\n';
+    std::cout << "Patient ID: " << patient_id << '\n';
 
-    std::cout << "Patient Name: "
-              << patient_name << '\n';
+    std::cout << "Patient Name: " << patient_name << '\n';
 
-    std::cout << "Modality: "
-              << modality << '\n';
+    std::cout << "Modality: " << modality << '\n';
 
-    std::cout << "Study Description: "
-              << study_description << '\n';
+    std::cout << "Study Description: " << study_description << '\n';
 }
 
 // DICOM format: (TAG) VR [VALUE]

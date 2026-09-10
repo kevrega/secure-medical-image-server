@@ -71,3 +71,9 @@ Testing/
 # Runtime data
 data/patients.txt
 data/*.db
+
+# Python virtual environment
+.venv/
+
+# Generated ML output
+data/analysis_result.txt
