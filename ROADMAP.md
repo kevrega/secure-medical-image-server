@@ -30,7 +30,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Add a REST API
 - Handle requests between the server and clients
 
-## Phase 5 - Medical Image Support ☐
+## Phase 5 - Medical Image Support 🗹
 
 - Add DICOM support
 - Import medical images
