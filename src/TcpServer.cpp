@@ -207,7 +207,83 @@ void TcpServer::handleClient(int client_socket) {
             }
 
 
-            try {
+            // Reject request if the body is too large
+            if (body.size() > 512) {
+
+                response = makeHttpResponse(
+                    "413 Payload Too Large",
+                    "Request body is too large\n"
+                );
+
+                send(
+                    client_socket,
+                    response.c_str(),
+                    response.size(),
+                    0
+                );
+
+                close(client_socket);
+                return;
+            }
+
+
+            // ----------------------
+            // BASIC SECURITY
+            // ----------------------
+
+            // Get the expected API key from an environment variable
+            const char* expected_key =
+                std::getenv("MEDICAL_API_KEY");
+
+
+            // Find the API key sent by the client
+            std::string api_key;
+
+            std::string key_header = "X-API-Key: ";
+
+            std::size_t key_position = message.find(key_header);
+
+            if (key_position != std::string::npos) {
+
+                // Start reading after "X-API-Key: "
+                std::size_t key_start = key_position + key_header.size();
+
+                // Find the end of this HTTP header
+                std::size_t key_end = message.find("\r\n", key_start);
+
+                // Extract only the API key
+                api_key =
+                    message.substr(
+                        key_start,
+                        key_end - key_start
+                    );
+            }
+
+
+            // Server must have an API key configured
+            if (expected_key == nullptr) {
+
+                response = makeHttpResponse(
+                    "500 Internal Server Error",
+                    "Server API key is not configured\n"
+                );
+            }
+
+
+            // Client must send the correct API key
+            else if (api_key != expected_key) {
+
+                response = makeHttpResponse(
+                    "401 Unauthorized",
+                    "Invalid or missing API key\n"
+                );
+            }
+
+
+            // API key is correct, continue to the REST API
+            else {
+
+                try {
 
                 // ----------------------
                 // PATIENT REST API
@@ -262,7 +338,14 @@ void TcpServer::handleClient(int client_socket) {
                     int age;
 
 
-                    if (data >> id >> name >> age) {
+                    if (
+                        data >> id >> name >> age &&
+                        id > 0 &&
+                        !name.empty() &&
+                        name.size() <= 50 &&
+                        age >= 0 &&
+                        age <= 120
+                    ) {
 
                         db.addPatient(
                             id,
@@ -301,7 +384,14 @@ void TcpServer::handleClient(int client_socket) {
                     int age;
 
 
-                    if (data >> id >> name >> age) {
+                    if (
+                        data >> id >> name >> age &&
+                        id > 0 &&
+                        !name.empty() &&
+                        name.size() <= 50 &&
+                        age >= 0 &&
+                        age <= 120
+                    ) {
 
                         db.updatePatient(
                             id,
@@ -338,7 +428,10 @@ void TcpServer::handleClient(int client_socket) {
                     int id;
 
 
-                    if (data >> id) {
+                    if (
+                        data >> id &&
+                        id > 0
+                    ) {
 
                         db.deletePatient(id);
 
@@ -413,10 +506,12 @@ void TcpServer::handleClient(int client_socket) {
 
 
                     if (
-                        data >>
-                        id >>
-                        username >>
-                        role
+                        data >> id >> username >> role &&
+                        id > 0 &&
+                        !username.empty() &&
+                        username.size() <= 50 &&
+                        !role.empty() &&
+                        role.size() <= 30
                     ) {
 
                         db.addUser(
@@ -457,10 +552,12 @@ void TcpServer::handleClient(int client_socket) {
 
 
                     if (
-                        data >>
-                        id >>
-                        username >>
-                        role
+                        data >> id >> username >> role &&
+                        id > 0 &&
+                        !username.empty() &&
+                        username.size() <= 50 &&
+                        !role.empty() &&
+                        role.size() <= 30
                     ) {
 
                         db.updateUser(
@@ -498,7 +595,10 @@ void TcpServer::handleClient(int client_socket) {
                     int id;
 
 
-                    if (data >> id) {
+                    if (
+                        data >> id &&
+                        id > 0
+                    ) {
 
                         db.deleteUser(id);
 
@@ -573,10 +673,11 @@ void TcpServer::handleClient(int client_socket) {
 
 
                     if (
-                        data >>
-                        id >>
-                        patient_id >>
-                        description
+                        data >> id >> patient_id >> description &&
+                        id > 0 &&
+                        patient_id > 0 &&
+                        !description.empty() &&
+                        description.size() <= 100
                     ) {
 
                         db.addStudy(
@@ -617,10 +718,11 @@ void TcpServer::handleClient(int client_socket) {
 
 
                     if (
-                        data >>
-                        id >>
-                        patient_id >>
-                        description
+                        data >> id >> patient_id >> description &&
+                        id > 0 &&
+                        patient_id > 0 &&
+                        !description.empty() &&
+                        description.size() <= 100
                     ) {
 
                         db.updateStudy(
@@ -658,7 +760,10 @@ void TcpServer::handleClient(int client_socket) {
                     int id;
 
 
-                    if (data >> id) {
+                    if (
+                        data >> id &&
+                        id > 0
+                    ) {
 
                         db.deleteStudy(id);
 
@@ -744,14 +849,15 @@ void TcpServer::handleClient(int client_socket) {
             }
 
 
-            catch (std::exception const& error) {
+                catch (std::exception const& error) {
 
-                response = makeHttpResponse(
-                    "400 Bad Request",
-                    "ERROR: " +
-                    std::string{error.what()} +
-                    "\n"
-                );
+                    response = makeHttpResponse(
+                        "400 Bad Request",
+                        "ERROR: " +
+                        std::string{error.what()} +
+                        "\n"
+                    );
+                }
             }
         }
 
