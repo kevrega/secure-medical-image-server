@@ -44,7 +44,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Add thread-safe operations
 - Handle multiple requests at the same time
 
-## Phase 7 - Security ☐
+## Phase 7 - Security 🗹
 
 - Add user authentication
 - Add user roles and permissions
