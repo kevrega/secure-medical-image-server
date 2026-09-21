@@ -5,10 +5,6 @@
 
 int main() {
 
-    // Read test DICOM file
-    DicomReader reader;
-    reader.readFile("data/test.dcm");
-
     // Use this for server end
     TcpServer server{1337};
     server.start();

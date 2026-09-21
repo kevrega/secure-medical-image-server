@@ -1,5 +1,6 @@
 #include "TcpServer.h"
 #include "Database.h"
+#include "DicomReader.h"
 
 #include <iostream>
 #include <sstream>
@@ -111,7 +112,7 @@ void TcpServer::start() {
 
         if (client_socket == -1) {
 
-            // Socket ID >= 0 is valid
+            // 0 = Success, -1 = Failure
             throw std::runtime_error{"Accept failed"};
         }
 
@@ -779,6 +780,143 @@ void TcpServer::handleClient(int client_socket) {
                         response = makeHttpResponse(
                             "400 Bad Request",
                             "Invalid study ID\n"
+                        );
+                    }
+                }
+
+
+                // ----------------------
+                // DICOM IMPORT
+                // ----------------------
+
+                // POST /dicom
+                // Body: scan.dcm
+                else if (
+                    method == "POST" &&
+                    path == "/dicom"
+                ) {
+
+                    std::istringstream data{body};
+
+                    std::string filename;
+
+                    // Read the filename from the HTTP body
+                    //
+                    // Also reject paths such as:
+                    // ../secret.txt
+                    // folder/scan.dcm
+                    //
+                    // We only want a simple filename located inside data/
+
+                    if (
+                        data >> filename &&
+                        filename.find("..") == std::string::npos &&
+                        filename.find('/') == std::string::npos &&
+                        filename.find('\\') == std::string::npos
+                    ) {
+
+                        // DICOM files are read only from data/
+                        std::string dicom_path =
+                            "data/" + filename;
+
+
+                        DicomReader reader;
+
+                        DicomInfo info =
+                            reader.readFile(
+                                dicom_path
+                            );
+
+
+                        // ----------------------
+                        // ADD PATIENT
+                        // ----------------------
+
+                        bool patient_exists = false;
+
+                        auto patients =
+                            db.getPatients();
+
+
+                        for (auto const& patient : patients) {
+
+                            if (
+                                patient.get_id() ==
+                                info.patient_id
+                            ) {
+
+                                patient_exists = true;
+                                break;
+                            }
+                        }
+
+
+                        // Only add patient if this patient
+                        // is not already in the database
+                        if (!patient_exists) {
+
+                            db.addPatient(
+                                info.patient_id,
+                                info.patient_name,
+                                info.patient_age
+                            );
+                        }
+
+
+                        // ----------------------
+                        // ADD STUDY
+                        // ----------------------
+
+                        bool study_exists = false;
+
+                        auto studies =
+                            db.getStudies();
+
+
+                        for (auto const& study : studies) {
+
+                            if (
+                                study.get_id() ==
+                                info.study_id
+                            ) {
+
+                                study_exists = true;
+                                break;
+                            }
+                        }
+
+
+                        // Only add study if this study
+                        // is not already in the database
+                        if (!study_exists) {
+
+                            db.addStudy(
+                                info.study_id,
+                                info.patient_id,
+                                info.study_description
+                            );
+
+
+                            response = makeHttpResponse(
+                                "201 Created",
+                                "DICOM patient and study imported\n"
+                            );
+                        }
+
+                        else {
+
+                            response = makeHttpResponse(
+                                "200 OK",
+                                "DICOM study already exists\n"
+                            );
+                        }
+                    }
+
+                    else {
+
+                        response = makeHttpResponse(
+                            "400 Bad Request",
+                            "Invalid DICOM filename\n"
                         );
                     }
                 }
