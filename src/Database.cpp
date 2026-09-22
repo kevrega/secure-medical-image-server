@@ -25,6 +25,9 @@ Database::Database(std::string const& filename)
 
     sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
     // Enforce foreign key relationships declared
+
+    // Wait briefly if another client is currently using the database
+    sqlite3_busy_timeout(db, 3000);
 }
 
 Database::~Database() {
@@ -58,6 +61,16 @@ void Database::createTables() {
         "patient_id INTEGER NOT NULL,"
         "description TEXT NOT NULL,"
         "FOREIGN KEY(patient_id) REFERENCES patients(id)"
+        ");"
+
+        // Each image belongs to one study
+        "CREATE TABLE IF NOT EXISTS images ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "study_id INTEGER NOT NULL,"
+        "filename TEXT NOT NULL,"
+        "storage_path TEXT NOT NULL,"
+        "FOREIGN KEY(study_id) REFERENCES studies(id) ON DELETE CASCADE,"
+        "UNIQUE(study_id, filename)"
         ");";
 
     char* error_message = nullptr;
@@ -451,6 +464,204 @@ void Database::deleteStudy(int id)
             "Could not delete study: " + error
         };
     }
+
+    sqlite3_finalize(statement);
+}
+
+// -------------------
+// MEDICAL IMAGES
+// -------------------
+
+int Database::addImage(
+    int study_id,
+    std::string const& filename,
+    std::string const& storage_path
+) {
+    const char* sql =
+        "INSERT INTO images (study_id, filename, storage_path) "
+        "VALUES (?, ?, ?);";
+
+    sqlite3_stmt* statement = nullptr;
+
+
+    if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK) {
+        throw std::runtime_error{
+            "Could not prepare image insert statement"
+        };
+    }
+
+
+    // The study ID links this image to its study
+    sqlite3_bind_int(statement, 1, study_id);
+
+    sqlite3_bind_text(
+        statement,
+        2,
+        filename.c_str(),
+        -1,
+        SQLITE_TRANSIENT
+    );
+
+    // Store where the actual file exists on disk
+    sqlite3_bind_text(
+        statement,
+        3,
+        storage_path.c_str(),
+        -1,
+        SQLITE_TRANSIENT
+    );
+
+
+    int result =
+        sqlite3_step(statement);
+
+
+    if (result != SQLITE_DONE) {
+        int error_code =
+            sqlite3_extended_errcode(db);
+
+        std::string error{sqlite3_errmsg(db)};
+
+        sqlite3_finalize(statement);
+
+
+        // The same filename can only appear once inside one study
+        if (error_code == SQLITE_CONSTRAINT_UNIQUE) {
+            throw std::runtime_error{
+                "This study already contains an image named " +
+                filename +
+                "."
+            };
+        }
+
+
+        throw std::runtime_error{
+            "Could not insert image: " + error
+        };
+    }
+
+
+    // SQLite created the image ID automatically
+    int image_id =
+        static_cast<int>(
+            sqlite3_last_insert_rowid(db)
+        );
+
+
+    sqlite3_finalize(statement);
+
+    return image_id;
+}
+
+
+std::vector<MedicalImage> Database::getImages(int study_id) {
+    std::vector<MedicalImage> images;
+
+
+    const char* sql =
+        "SELECT id, study_id, filename, storage_path "
+        "FROM images "
+        "WHERE study_id = ? "
+        "ORDER BY id;";
+
+
+    sqlite3_stmt* statement = nullptr;
+
+
+    if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK) {
+        throw std::runtime_error{
+            "Could not prepare image select statement"
+        };
+    }
+
+
+    // Only get images belonging to this study
+    sqlite3_bind_int(statement, 1, study_id);
+
+
+    while (sqlite3_step(statement) == SQLITE_ROW) {
+        int id =
+            sqlite3_column_int(
+                statement,
+                0
+            );
+
+        int image_study_id =
+            sqlite3_column_int(
+                statement,
+                1
+            );
+
+
+        std::string filename{
+            reinterpret_cast<const char*>(
+                sqlite3_column_text(
+                    statement,
+                    2
+                )
+            )
+        };
+
+
+        std::string storage_path{
+            reinterpret_cast<const char*>(
+                sqlite3_column_text(
+                    statement,
+                    3
+                )
+            )
+        };
+
+
+        images.push_back(
+            MedicalImage{
+                id,
+                image_study_id,
+                filename,
+                storage_path
+            }
+        );
+    }
+
+
+    sqlite3_finalize(statement);
+
+    return images;
+}
+
+void Database::deleteImage(
+    int id,
+    int study_id
+) {
+    const char* sql =
+        "DELETE FROM images "
+        "WHERE id = ? AND study_id = ?;";
+
+    sqlite3_stmt* statement = nullptr;
+
+
+    if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK) {
+        throw std::runtime_error{
+            "Could not prepare image delete statement"
+        };
+    }
+
+
+    // The study ID makes sure an image is only deleted from its own study
+    sqlite3_bind_int(statement, 1, id);
+    sqlite3_bind_int(statement, 2, study_id);
+
+
+    if (sqlite3_step(statement) != SQLITE_DONE) {
+        std::string error{sqlite3_errmsg(db)};
+
+        sqlite3_finalize(statement);
+
+        throw std::runtime_error{
+            "Could not delete image: " + error
+        };
+    }
+
 
     sqlite3_finalize(statement);
 }

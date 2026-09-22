@@ -1,70 +1,372 @@
+import base64
+import io
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pydicom
+
+from PIL import Image
+from pydicom.data import get_testdata_file
 from sklearn.cluster import KMeans
 
-import pydicom
-import matplotlib.pyplot as plt
-import numpy as np
 
-from pydicom.data import get_testdata_file
+OUTPUT_FILE = Path("data/analysis_result.txt")
 
 
-# Find the DICOM file
-file_path = get_testdata_file("CT_small.dcm")
+# Scale image values to 0-255 so they can be displayed
+def normalize_image(image):
 
-# Read the DICOM file
-dataset = pydicom.dcmread(file_path)
+    image = image.astype(np.float32)
 
-# Get the actual image pixels
-image = dataset.pixel_array
+    minimum = float(np.min(image))
+    maximum = float(np.max(image))
 
-print("Modality:", dataset.Modality)
-print("Image size:", image.shape)
-print("Lowest pixel value:", image.min())
-print("Highest pixel value:", image.max())
+    if maximum == minimum:
+        return np.zeros(
+            image.shape,
+            dtype=np.uint8
+        )
 
-# Save original CT image
-plt.imshow(image, cmap="gray")
-plt.savefig("ct_image.png")
-plt.clf()
+    normalized = (
+        image - minimum
+    ) / (
+        maximum - minimum
+    )
 
-# Make ONE long column of pixels
-# -1 means Python calculates how many rows are needed
-pixels = image.reshape(-1, 1)
+    normalized = (
+        normalized * 255
+    ).clip(
+        0,
+        255
+    )
 
-print("Pixels shape:", pixels.shape)
+    return normalized.astype(np.uint8)
 
-# Create K-Means ML model and divide pixels into 3 groups
-model = KMeans(n_clusters=3, random_state=0)
 
-# Let K-Means learn the 3 groups from the pixel values
-model.fit(pixels)
+# Convert a grayscale image to PNG and then Base64
+def png_base64(image):
 
-# Get which group (0, 1, or 2) each pixel belongs to
-labels = model.labels_
+    image = normalize_image(image)
 
-print("First 20 labels:", labels[:20])
+    picture = Image.fromarray(
+        image,
+        mode="L"
+    )
 
-# Show the average/center pixel value of each group
-print("Cluster centers:", model.cluster_centers_)
+    buffer = io.BytesIO()
 
-# Count how many pixels belong to each group
-unique, counts = np.unique(labels, return_counts=True)
+    picture.save(
+        buffer,
+        format="PNG"
+    )
 
-print("Labels:", unique)
-print("Counts:", counts)
+    return base64.b64encode(
+        buffer.getvalue()
+    ).decode("ascii")
 
-# Turn the long list of labels back into a 128x128 image
-clustered_image = labels.reshape(image.shape)
 
-# Save the clustered result
-plt.imshow(clustered_image)
-plt.savefig("clustered_ct.png")
+# Create a colored image showing the three K-Means groups
+def clustered_png_base64(labels):
 
-# Save ML result so the C++ server can read it
-with open("data/analysis_result.txt", "w") as file:
-    file.write("Cluster centers: ")
-    file.write(str(model.cluster_centers_.flatten())) # Make the cluster centre into a long row instead
-    file.write("\n")
+    palette = np.array(
+        [
+            [18, 32, 52],
+            [70, 140, 190],
+            [238, 239, 225]
+        ],
+        dtype=np.uint8
+    )
 
-    file.write("Counts: ")
-    file.write(str(counts))
-    file.write("\n")
+    colored = palette[labels]
+
+    picture = Image.fromarray(
+        colored,
+        mode="RGB"
+    )
+
+    buffer = io.BytesIO()
+
+    picture.save(
+        buffer,
+        format="PNG"
+    )
+
+    return base64.b64encode(
+        buffer.getvalue()
+    ).decode("ascii")
+
+
+# Read DICOM, PNG or JPG image
+def load_image(path):
+
+    path = Path(path)
+
+    extension = path.suffix.lower()
+
+
+    if extension == ".dcm":
+
+        dataset = pydicom.dcmread(path)
+
+        # Some DICOM files, such as test.dcm, only contain metadata
+        if "PixelData" not in dataset:
+            raise ValueError(
+                "This DICOM contains metadata only and has no image pixels."
+            )
+
+        image = dataset.pixel_array
+
+        modality = str(
+            getattr(
+                dataset,
+                "Modality",
+                "DICOM"
+            )
+        )
+
+
+        # Use first frame if this is a multi-frame DICOM
+        if (
+            image.ndim == 3 and
+            image.shape[-1] not in (3, 4)
+        ):
+            image = image[0]
+
+
+        # Convert RGB DICOM to grayscale
+        if (
+            image.ndim == 3 and
+            image.shape[-1] in (3, 4)
+        ):
+            image = np.mean(
+                image[..., :3],
+                axis=2
+            )
+
+
+        return (
+            image.astype(np.float32),
+            modality,
+            "DICOM"
+        )
+
+
+    if extension in (
+        ".png",
+        ".jpg",
+        ".jpeg"
+    ):
+
+        picture = Image.open(
+            path
+        ).convert("L")
+
+
+        # Avoid running K-Means on a huge image
+        picture.thumbnail(
+            (1200, 1200)
+        )
+
+
+        image = np.asarray(
+            picture,
+            dtype=np.float32
+        )
+
+
+        return (
+            image,
+            "IMAGE",
+            extension[1:].upper()
+        )
+
+
+    raise ValueError(
+        "Unsupported image format."
+    )
+
+
+# Run K-Means on the image pixels
+def analyse(path):
+
+    image, modality, input_type = load_image(path)
+
+    # K-Means receives one grayscale value for each pixel
+    pixels = image.reshape(-1, 1)
+
+    model = KMeans(
+        n_clusters=3,
+        random_state=0,
+        n_init=10
+    )
+
+
+    # Large images only need a sample for training
+    if len(pixels) > 200000:
+
+        generator = np.random.default_rng(0)
+
+        indexes = generator.choice(
+            len(pixels),
+            size=200000,
+            replace=False
+        )
+
+        model.fit(
+            pixels[indexes]
+        )
+
+        labels = model.predict(
+            pixels
+        )
+
+    else:
+
+        labels = model.fit_predict(
+            pixels
+        )
+
+
+    centers = model.cluster_centers_[:, 0]
+
+
+    # Order clusters from darkest to brightest
+    order = np.argsort(
+        centers
+    )
+
+    mapping = np.zeros(
+        len(order),
+        dtype=np.int32
+    )
+
+
+    for new_value, old_value in enumerate(order):
+
+        mapping[old_value] = new_value
+
+
+    labels = mapping[labels]
+
+    sorted_centers = centers[order]
+
+    clustered = labels.reshape(
+        image.shape
+    )
+
+    counts = np.bincount(
+        labels,
+        minlength=3
+    )
+
+
+    # Images are returned as Base64 so React can display them directly
+    result = {
+        "source_name": Path(path).name,
+
+        "input_type": input_type,
+
+        "modality": modality,
+
+        "width": int(
+            image.shape[1]
+        ),
+
+        "height": int(
+            image.shape[0]
+        ),
+
+        "min_pixel": float(
+            np.min(image)
+        ),
+
+        "max_pixel": float(
+            np.max(image)
+        ),
+
+        "cluster_centers": [
+            float(value)
+            for value in sorted_centers
+        ],
+
+        "counts": [
+            int(value)
+            for value in counts
+        ],
+
+        "original_image":
+            png_base64(image),
+
+        "clustered_image":
+            clustered_png_base64(
+                clustered
+            )
+    }
+
+
+    return result
+
+
+# Save result where the C++ server expects it
+def write_result(result):
+
+    OUTPUT_FILE.parent.mkdir(
+        exist_ok=True
+    )
+
+    with open(
+        OUTPUT_FILE,
+        "w"
+    ) as file:
+
+        json.dump(
+            result,
+            file
+        )
+
+
+def main():
+
+    try:
+
+        # If C++ sends a filename, analyze that file
+        if len(sys.argv) > 1:
+
+            image_path = sys.argv[1]
+
+        else:
+
+            # Used by the "Run demo CT" button
+            image_path = get_testdata_file(
+                "CT_small.dcm"
+            )
+
+
+        result = analyse(
+            image_path
+        )
+
+
+    except Exception as error:
+
+        result = {
+            "error": str(error)
+        }
+
+
+    write_result(
+        result
+    )
+
+
+    print(
+        json.dumps(
+            result
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -12,6 +12,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Install the native libraries used by the C++ build
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -27,5 +28,6 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # CTest runs the tests registered by CMake
       - name: Run tests
         run: ctest --test-dir build --output-on-failure

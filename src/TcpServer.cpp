@@ -2,13 +2,16 @@
 #include "Database.h"
 #include "DicomReader.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib> // system()
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <fstream>
 #include <thread>
-#include <cstdlib> // system()
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -18,15 +21,238 @@
 // Create a simple HTTP response
 std::string makeHttpResponse(
     std::string const& status,
-    std::string const& body
+    std::string const& body,
+    std::string const& content_type = "text/plain"
 ) {
     return
         "HTTP/1.1 " + status + "\r\n"
-        "Content-Type: text/plain\r\n"
+        "Content-Type: " + content_type + "\r\n"
         "Content-Length: " + std::to_string(body.size()) + "\r\n"
         "Connection: close\r\n"
         "\r\n" +
         body;
+}
+
+
+// Convert text to lowercase
+std::string toLower(std::string text) {
+
+    std::transform(
+        text.begin(),
+        text.end(),
+        text.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        }
+    );
+
+    return text;
+}
+
+
+// Remove spaces from the beginning and end of a string
+std::string trim(std::string text) {
+
+    while (
+        !text.empty() &&
+        std::isspace(static_cast<unsigned char>(text.front()))
+    ) {
+        text.erase(text.begin());
+    }
+
+    while (
+        !text.empty() &&
+        std::isspace(static_cast<unsigned char>(text.back()))
+    ) {
+        text.pop_back();
+    }
+
+    return text;
+}
+
+
+// Find one HTTP header
+// HTTP header names are case-insensitive
+std::string getHeaderValue(
+    std::string const& headers,
+    std::string const& wanted_header
+) {
+
+    std::istringstream input{headers};
+
+    std::string line;
+
+    // Skip the first request line
+    std::getline(input, line);
+
+
+    while (std::getline(input, line)) {
+
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+
+
+        std::size_t colon_position = line.find(':');
+
+        if (colon_position == std::string::npos) {
+            continue;
+        }
+
+
+        std::string header_name =
+            trim(line.substr(0, colon_position));
+
+
+        if (
+            toLower(header_name) ==
+            toLower(wanted_header)
+        ) {
+            return trim(
+                line.substr(colon_position + 1)
+            );
+        }
+    }
+
+
+    return "";
+}
+
+
+// Send the complete response
+// send() is allowed to send fewer bytes than requested
+void sendAll(
+    int client_socket,
+    std::string const& response
+) {
+
+    std::size_t total_sent = 0;
+
+
+    while (total_sent < response.size()) {
+
+        ssize_t sent = send(
+            client_socket,
+            response.data() + total_sent,
+            response.size() - total_sent,
+            0
+        );
+
+
+        if (sent <= 0) {
+            break;
+        }
+
+
+        total_sent += static_cast<std::size_t>(sent);
+    }
+}
+
+
+// Read the Python analysis result into one string
+std::string readAnalysisResult() {
+
+    std::ifstream file{
+        "data/analysis_result.txt"
+    };
+
+
+    if (!file) {
+        throw std::runtime_error{
+            "Could not read analysis result"
+        };
+    }
+
+
+    std::ostringstream result;
+    result << file.rdbuf();
+
+    return result.str();
+}
+
+
+// Only allow a simple uploaded filename
+std::string safeFilename(std::string filename) {
+
+    if (
+        filename.empty() ||
+        filename.find("..") != std::string::npos ||
+        filename.find('/') != std::string::npos ||
+        filename.find('\\') != std::string::npos
+    ) {
+        throw std::runtime_error{
+            "Invalid image filename"
+        };
+    }
+
+
+    for (char& character : filename) {
+
+        unsigned char value =
+            static_cast<unsigned char>(character);
+
+
+        if (
+            !std::isalnum(value) &&
+            character != '.' &&
+            character != '_' &&
+            character != '-'
+        ) {
+            character = '_';
+        }
+    }
+
+
+    return filename;
+}
+
+
+// Check if Python knows how to read this image type
+bool supportedImage(std::string const& filename) {
+
+    std::string extension =
+        toLower(
+            std::filesystem::path{filename}
+                .extension()
+                .string()
+        );
+
+
+    return
+        extension == ".dcm" ||
+        extension == ".png" ||
+        extension == ".jpg" ||
+        extension == ".jpeg";
+}
+
+
+// Run the Python image analysis
+std::string runImageAnalysis(
+    std::string const& image_path = ""
+) {
+
+    std::string command =
+        ".venv/bin/python "
+        "python/image_analysis.py";
+
+
+    if (!image_path.empty()) {
+        command += " " + image_path;
+    }
+
+
+    int python_result =
+        std::system(command.c_str());
+
+
+    if (python_result != 0) {
+        throw std::runtime_error{
+            "Analysis failed"
+        };
+    }
+
+
+    return readAnalysisResult();
 }
 
 
@@ -99,6 +325,14 @@ void TcpServer::start() {
     }
 
 
+    // Create the tables once before client threads start.
+    // Each client will still open its own database connection.
+    {
+        Database db{"data/medical.db"};
+        db.createTables();
+    }
+
+
     std::cout << "Listening on port " << port << '\n';
 
 
@@ -140,29 +374,67 @@ void TcpServer::handleClient(int client_socket) {
 
     // Each thread gets its own database connection
     Database db{"data/medical.db"};
-    db.createTables();
 
 
     // Buffer where received client data will be stored
-    char buffer[1024]{};
+    char buffer[8192]{};
 
 
     // Receive data from this client
     ssize_t bytes_received = recv(
         client_socket,         // Receive from specific client
         buffer,                // Store data here
-        sizeof(buffer) - 1,    // Max data to receive
+        sizeof(buffer),        // Max data to receive
         0
     );
 
 
     if (bytes_received > 0) {
 
-        std::string message{buffer};
+        // Use the exact number of bytes received.
+        // This also lets std::string store binary image data.
+        std::string message{
+            buffer,
+            static_cast<std::size_t>(bytes_received)
+        };
 
-        std::cout << "Received:\n"
-                  << message
-                  << '\n';
+
+        // Find the end of the HTTP headers first
+        std::size_t body_position =
+            message.find("\r\n\r\n");
+
+
+        while (body_position == std::string::npos) {
+
+            bytes_received = recv(
+                client_socket,
+                buffer,
+                sizeof(buffer),
+                0
+            );
+
+
+            if (bytes_received <= 0) {
+                break;
+            }
+
+
+            message.append(
+                buffer,
+                static_cast<std::size_t>(bytes_received)
+            );
+
+
+            // Do not allow an extremely large HTTP header
+            if (message.size() > 64 * 1024) {
+                break;
+            }
+
+
+            body_position =
+                message.find("\r\n\r\n");
+        }
+
 
         std::string response;
 
@@ -178,7 +450,10 @@ void TcpServer::handleClient(int client_socket) {
             message.find("DELETE ") == 0;
 
 
-        if (is_http) {
+        if (
+            is_http &&
+            body_position != std::string::npos
+        ) {
 
             // First line looks like:
             // GET /patients HTTP/1.1
@@ -191,41 +466,134 @@ void TcpServer::handleClient(int client_socket) {
             request >> method >> path >> http_version;
 
 
+            // Keep only the HTTP header section
+            std::string headers =
+                message.substr(0, body_position);
+
+
             // Find HTTP body (everything after empty line)
             std::string body;
 
-            std::size_t body_position =
-                message.find("\r\n\r\n");
+
+            // Find how many body bytes the client says it sent
+            std::string content_length_text =
+                getHeaderValue(
+                    headers,
+                    "Content-Length"
+                );
+
+            std::size_t content_length = 0;
 
 
-            // If "\r\n\r\n" was found,
-            // there is a body after the HTTP headers
-            if (body_position != std::string::npos) {
+            if (!content_length_text.empty()) {
 
-                // Take everything after "\r\n\r\n"
-                // and store it as the request body
-                body = message.substr(body_position + 4);
+                try {
+                    content_length =
+                        std::stoull(content_length_text);
+                }
+
+                catch (...) {
+                    response = makeHttpResponse(
+                        "400 Bad Request",
+                        "Invalid Content-Length\n"
+                    );
+
+                    sendAll(client_socket, response);
+                    close(client_socket);
+                    return;
+                }
             }
 
 
+            // Normal REST request bodies stay small.
+            // Image uploads are allowed to be larger.
+            std::size_t max_body_size =
+                path == "/analyze-image"
+                    ? 15 * 1024 * 1024
+                    : 512;
+
+
             // Reject request if the body is too large
-            if (body.size() > 512) {
+            if (content_length > max_body_size) {
 
                 response = makeHttpResponse(
                     "413 Payload Too Large",
                     "Request body is too large\n"
                 );
 
-                send(
+                sendAll(
                     client_socket,
-                    response.c_str(),
-                    response.size(),
-                    0
+                    response
                 );
 
                 close(client_socket);
                 return;
             }
+
+
+            // If "\r\n\r\n" was found,
+            // there is a body after the HTTP headers
+            std::size_t body_start =
+                body_position + 4;
+
+
+            // A file can be much larger than one recv() call.
+            // Keep receiving until the complete HTTP body is here.
+            while (
+                message.size() - body_start <
+                content_length
+            ) {
+
+                bytes_received = recv(
+                    client_socket,
+                    buffer,
+                    sizeof(buffer),
+                    0
+                );
+
+
+                if (bytes_received <= 0) {
+                    break;
+                }
+
+
+                message.append(
+                    buffer,
+                    static_cast<std::size_t>(bytes_received)
+                );
+            }
+
+
+            if (
+                message.size() - body_start <
+                content_length
+            ) {
+                response = makeHttpResponse(
+                    "400 Bad Request",
+                    "Incomplete HTTP body\n"
+                );
+
+                sendAll(client_socket, response);
+                close(client_socket);
+                return;
+            }
+
+
+            // Take everything after "\r\n\r\n"
+            // and store it as the request body
+            body = message.substr(
+                body_start,
+                content_length
+            );
+
+
+            // Do not print binary image bytes to the terminal
+            std::cout
+                << "Received: "
+                << method
+                << " "
+                << path
+                << "\n";
 
 
             // ----------------------
@@ -242,24 +610,29 @@ void TcpServer::handleClient(int client_socket) {
 
             std::string key_header = "X-API-Key: ";
 
-            std::size_t key_position = message.find(key_header);
+            std::size_t key_position = headers.find(key_header);
+
+            // Vite may send the header name in lowercase
+            if (key_position == std::string::npos) {
+                key_header = "x-api-key: ";
+                key_position = headers.find(key_header);
+            }
 
             if (key_position != std::string::npos) {
 
-                // Start reading after "X-API-Key: "
+                // Start reading after the API key header
                 std::size_t key_start = key_position + key_header.size();
 
                 // Find the end of this HTTP header
-                std::size_t key_end = message.find("\r\n", key_start);
+                std::size_t key_end = headers.find("\r\n", key_start);
 
                 // Extract only the API key
                 api_key =
-                    message.substr(
+                    headers.substr(
                         key_start,
                         key_end - key_start
                     );
             }
-
 
             // Server must have an API key configured
             if (expected_key == nullptr) {
@@ -786,6 +1159,154 @@ void TcpServer::handleClient(int client_socket) {
 
 
                 // ----------------------
+                // STUDY IMAGE REST API
+                // ----------------------
+
+                // GET /images?study_id=10
+                // Returns the images already connected to one study
+                else if (
+                    method == "GET" &&
+                    path.find("/images?study_id=") == 0
+                ) {
+
+                    std::string study_id_text =
+                        path.substr(
+                            std::string{"/images?study_id="}.size()
+                        );
+
+
+                    int study_id;
+
+
+                    try {
+                        study_id =
+                            std::stoi(study_id_text);
+                    }
+
+                    catch (...) {
+                        throw std::runtime_error{
+                            "Invalid study ID"
+                        };
+                    }
+
+
+                    if (study_id <= 0) {
+                        throw std::runtime_error{
+                            "Invalid study ID"
+                        };
+                    }
+
+
+                    auto images =
+                        db.getImages(study_id);
+
+                    std::string result;
+
+
+                    for (auto const& image : images) {
+
+                        result +=
+                            std::to_string(image.id) +
+                            " " +
+                            image.filename +
+                            "\n";
+                    }
+
+
+                    if (images.empty()) {
+                        result = "No images\n";
+                    }
+
+
+                    response = makeHttpResponse(
+                        "200 OK",
+                        result
+                    );
+                }
+
+
+                // DELETE /images
+                // Body: study_id image_id
+                else if (
+                    method == "DELETE" &&
+                    path == "/images"
+                ) {
+
+                    std::istringstream data{body};
+
+                    int study_id;
+                    int image_id;
+
+
+                    if (
+                        !(data >> study_id >> image_id) ||
+                        study_id <= 0 ||
+                        image_id <= 0
+                    ) {
+                        throw std::runtime_error{
+                            "Invalid image selection"
+                        };
+                    }
+
+
+                    auto images =
+                        db.getImages(study_id);
+
+                    bool image_found = false;
+                    std::string image_path;
+
+
+                    for (auto const& image : images) {
+
+                        if (image.id == image_id) {
+                            image_found = true;
+                            image_path =
+                                image.storage_path;
+                            break;
+                        }
+                    }
+
+
+                    if (!image_found) {
+                        throw std::runtime_error{
+                            "Image does not belong to the selected study"
+                        };
+                    }
+
+
+                    // Remove the file from disk before removing its database row
+                    if (
+                        std::filesystem::exists(
+                            image_path
+                        )
+                    ) {
+
+                        if (
+                            !std::filesystem::remove(
+                                image_path
+                            )
+                        ) {
+                            throw std::runtime_error{
+                                "Could not delete the stored image file"
+                            };
+                        }
+                    }
+
+
+                    db.deleteImage(
+                        image_id,
+                        study_id
+                    );
+
+
+                    response = makeHttpResponse(
+                        "200 OK",
+                        "Image deleted\n"
+                    );
+                }
+
+
+                // ----------------------
                 // DICOM IMPORT
                 // ----------------------
 
@@ -923,6 +1444,252 @@ void TcpServer::handleClient(int client_socket) {
 
 
                 // ----------------------
+                // EXISTING IMAGE ANALYSIS
+                // ----------------------
+
+                // POST /analyze-existing-image
+                // Body: study_id image_id
+                else if (
+                    method == "POST" &&
+                    path == "/analyze-existing-image"
+                ) {
+
+                    std::istringstream data{body};
+
+                    int study_id;
+                    int image_id;
+
+
+                    if (
+                        !(data >> study_id >> image_id) ||
+                        study_id <= 0 ||
+                        image_id <= 0
+                    ) {
+                        throw std::runtime_error{
+                            "Invalid image selection"
+                        };
+                    }
+
+
+                    auto images =
+                        db.getImages(study_id);
+
+                    bool image_found = false;
+                    std::string image_path;
+
+
+                    for (auto const& image : images) {
+
+                        if (image.id == image_id) {
+                            image_found = true;
+                            image_path =
+                                image.storage_path;
+                            break;
+                        }
+                    }
+
+
+                    if (!image_found) {
+                        throw std::runtime_error{
+                            "Image does not belong to the selected study"
+                        };
+                    }
+
+
+                    if (
+                        !std::filesystem::exists(
+                            image_path
+                        )
+                    ) {
+                        throw std::runtime_error{
+                            "The stored image file could not be found"
+                        };
+                    }
+
+
+                    // Run the same analysis on an image that was uploaded earlier
+                    std::string analysis =
+                        runImageAnalysis(
+                            image_path
+                        );
+
+
+                    response = makeHttpResponse(
+                        "200 OK",
+                        analysis,
+                        "application/json"
+                    );
+                }
+
+
+                // ----------------------
+                // IMAGE UPLOAD + ANALYSIS
+                // ----------------------
+
+                // POST /analyze-image
+                // Body: raw DICOM / PNG / JPG bytes
+                // X-Study-ID tells us which study this image belongs to
+                else if (
+                    method == "POST" &&
+                    path == "/analyze-image"
+                ) {
+
+                    // Browser sends the original filename in this header
+                    std::string filename =
+                        getHeaderValue(
+                            headers,
+                            "X-Filename"
+                        );
+
+
+                    filename = safeFilename(filename);
+
+
+                    if (!supportedImage(filename)) {
+                        throw std::runtime_error{
+                            "Supported files: DICOM, PNG, JPG and JPEG"
+                        };
+                    }
+
+
+                    if (body.empty()) {
+                        throw std::runtime_error{
+                            "No image was uploaded"
+                        };
+                    }
+
+
+                    // Browser also sends the study that should own this image
+                    std::string study_id_text =
+                        getHeaderValue(
+                            headers,
+                            "X-Study-ID"
+                        );
+
+
+                    if (study_id_text.empty()) {
+                        throw std::runtime_error{
+                            "Study ID is missing"
+                        };
+                    }
+
+
+                    int study_id;
+
+
+                    try {
+                        study_id = std::stoi(study_id_text);
+                    }
+
+                    catch (...) {
+                        throw std::runtime_error{
+                            "Invalid study ID"
+                        };
+                    }
+
+
+                    // Check that the selected study exists before saving the file
+                    bool study_exists = false;
+
+                    auto studies =
+                        db.getStudies();
+
+
+                    for (auto const& study : studies) {
+
+                        if (study.get_id() == study_id) {
+                            study_exists = true;
+                            break;
+                        }
+                    }
+
+
+                    if (!study_exists) {
+                        throw std::runtime_error{
+                            "Study does not exist"
+                        };
+                    }
+
+
+                    // Do not overwrite an image already stored for this study
+                    auto existing_images =
+                        db.getImages(study_id);
+
+
+                    for (auto const& image : existing_images) {
+
+                        if (image.filename == filename) {
+                            throw std::runtime_error{
+                                "This study already contains an image named " +
+                                filename +
+                                "."
+                            };
+                        }
+                    }
+
+
+                    // Keep each study's uploaded images in its own folder
+                    std::string upload_directory =
+                        "data/uploads/" +
+                        std::to_string(study_id);
+
+
+                    std::filesystem::create_directories(
+                        upload_directory
+                    );
+
+
+                    std::string upload_path =
+                        upload_directory +
+                        "/" +
+                        filename;
+
+
+                    // Save the uploaded binary data exactly as it arrived
+                    std::ofstream image_file{
+                        upload_path,
+                        std::ios::binary
+                    };
+
+
+                    if (!image_file) {
+                        throw std::runtime_error{
+                            "Could not save uploaded image"
+                        };
+                    }
+
+
+                    image_file.write(
+                        body.data(),
+                        static_cast<std::streamsize>(body.size())
+                    );
+
+                    image_file.close();
+
+
+                    // Run Python on the image the user just uploaded
+                    std::string analysis =
+                        runImageAnalysis(upload_path);
+
+
+                    // Store the link between this image and its study
+                    db.addImage(
+                        study_id,
+                        filename,
+                        upload_path
+                    );
+
+
+                    // Python writes JSON containing the result and images
+                    response = makeHttpResponse(
+                        "200 OK",
+                        analysis,
+                        "application/json"
+                    );
+                }
+
+
+                // ----------------------
                 // ANALYSIS REST API
                 // ----------------------
 
@@ -933,46 +1700,17 @@ void TcpServer::handleClient(int client_socket) {
                 ) {
 
                     // Run the Python ML script
-                    int python_result =
-                        std::system(
-                            ".venv/bin/python "
-                            "python/image_analysis.py"
-                        );
+                    // No file path means Python uses its demo CT image
+                    std::string analysis =
+                        runImageAnalysis();
 
 
-                    // Check if Python failed
-                    if (python_result != 0) {
-
-                        response = makeHttpResponse(
-                            "500 Internal Server Error",
-                            "Analysis failed\n"
-                        );
-                    }
-
-                    else {
-
-                        // Open the result created by Python
-                        std::ifstream file{
-                            "data/analysis_result.txt"
-                        };
-
-                        std::string analysis;
-                        std::string line;
-
-
-                        // Read every line from the result file
-                        while (std::getline(file, line)) {
-
-                            analysis += line + "\n";
-                        }
-
-
-                        // Send analysis back to client
-                        response = makeHttpResponse(
-                            "200 OK",
-                            analysis
-                        );
-                    }
+                    // Send analysis back to client
+                    response = makeHttpResponse(
+                        "200 OK",
+                        analysis,
+                        "application/json"
+                    );
                 }
 
 
@@ -1001,11 +1739,10 @@ void TcpServer::handleClient(int client_socket) {
 
 
         // Send response back to this client
-        send(
+        // Large analysis responses may need more than one send() call
+        sendAll(
             client_socket,
-            response.c_str(),
-            response.size(),
-            0
+            response
         );
     }
 
