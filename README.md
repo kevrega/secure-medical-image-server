@@ -1,48 +1,122 @@
 # Secure Medical Image Server
 
-A software engineering project focused on building a secure system for storing, managing and viewing medical images and related patient/study information.
+A project for storing and managing medical images together with patient and study information.
 
-The project will be developed gradually, starting with a C++ backend and expanding as new functionality is added.
+The backend is written in C++ and uses SQLite for storage. It also supports DICOM files, a REST API, multithreading, automated tests, Docker and GitHub Actions.
 
-## Planned features
+## Features
 
-* User accounts and login
-* Different user roles and permissions
-* Import and storage of medical images
-* DICOM image and metadata handling
-* Search for patients and studies
-* Image viewing
-* Database storage
-* Audit logs for important actions
+Currently implemented:
+
+* Patient, user and study management
+* SQLite database
+* TCP/HTTP server
 * REST API
-* Multithreaded server
-* Input validation and security
-* Automated testing
-* CI/CD with GitHub Actions
+* Multithreaded client handling
+* API key authentication
+* DICOM metadata reading with DCMTK
+* Importing patient and study information from DICOM files
+* Python-based image analysis
+* Unit tests with GoogleTest
 * Docker support
-* Simple web interface
+* CI with GitHub Actions
 
-## Technologies and areas
+## Technologies
 
-The project is intended to give practical experience with:
-
-* C++
-* Linux
-* Networking
-* Databases and SQL
-* Multithreading
-* REST APIs
-* Testing
-* Git and GitHub
-* CI/CD
+* C++17
+* CMake
+* SQLite
+* DCMTK
+* GoogleTest
+* Python
+* pydicom
 * Docker
-* Security
-* Web development
+* GitHub Actions
+* Linux
 
-## Development plan
+## Build
 
-The project will start with the basic C++ backend and core data structures.
+Configure the project:
 
-From there, functionality such as networking, persistent database storage, authentication, medical image handling and testing will be added gradually.
+```bash
+cmake -S . -B build
+```
 
-Later stages will focus on security, containerization, CI/CD and a web interface for interacting with the server.
+Build it:
+
+```bash
+cmake --build build
+```
+
+Set an API key:
+
+```bash
+export MEDICAL_API_KEY=test123
+```
+
+Start the server:
+
+```bash
+./build/med
+```
+
+The server runs on port `1337`.
+
+## Docker
+
+Build the image:
+
+```bash
+docker build -t medical-server .
+```
+
+Run it:
+
+```bash
+docker run --rm \
+-p 1337:1337 \
+-e MEDICAL_API_KEY=test123 \
+medical-server
+```
+
+The server can then be reached at:
+
+```text
+http://localhost:1337
+```
+
+For example:
+
+```bash
+curl http://localhost:1337/patients \
+-H "X-API-Key: test123"
+```
+
+## DICOM
+
+DICOM files in the `data` directory can be imported through the API.
+
+Example:
+
+```bash
+curl -X POST http://localhost:1337/dicom \
+-H "X-API-Key: test123" \
+--data "test.dcm"
+```
+
+The DICOM metadata is read and the patient and study information is added to the database.
+
+## Tests
+
+Run the tests with:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Tests currently cover patients, users, studies, file handling, database operations and DICOM metadata reading.
+
+## CI
+
+GitHub Actions builds the project and runs the tests automatically when changes are pushed to the repository or when a pull request is created.
+
