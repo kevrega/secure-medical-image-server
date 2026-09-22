@@ -1,0 +1,8 @@
+build/
+.venv/
+.git/
+__pycache__/
+*.pyc
+
+data/medical.db
+data/analysis_result.txt
