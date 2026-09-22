@@ -52,7 +52,7 @@ This project will be developed step by step, starting with the core C++ backend.
 - Add audit logging
 - Improve secure handling of data
 
-## Phase 8 - CI/CD and Docker ☐
+## Phase 8 - CI/CD and Docker 🗹
 
 - Set up GitHub Actions
 - Run tests automatically
