@@ -8,15 +8,13 @@ The image analysis is included as a demonstration of image processing and is not
 
 ## Preview
 
-<!-- Screenshots can be added here -->
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Secure Medical Image Server dashboard" width="900">
+</p>
 
-<!--
-![Dashboard](docs/images/dashboard.png)
-
-![Image analysis](docs/images/imaging-analysis.png)
-
-![Studies](docs/images/studies.png)
--->
+<p align="center">
+  <em>Web dashboard for managing patients, studies, users and medical images.</em>
+</p>
 
 ## Features
 
@@ -41,7 +39,6 @@ The image analysis is included as a demonstration of image processing and is not
 - Re-open and analyse previously uploaded images
 - Delete stored images
 - Import patient and study information from DICOM metadata
-- Analyse DICOM files containing pixel data
 
 ### Image analysis
 
@@ -61,43 +58,17 @@ The image analysis is included as a demonstration of image processing and is not
 - Study management
 - User management
 - Medical image upload
-- Study image browser
 - Image analysis view
 - DICOM metadata import
 - Backend connection status
 
-### Development
-
-- CMake
-- GoogleTest
-- CTest
-- Docker
-- GitHub Actions CI
-
 ## Architecture
 
-```text
-React / Vite frontend
-        |
-        | HTTP
-        v
-C++ HTTP server
-        |
-        +--------------------+
-        |                    |
-        v                    v
-     SQLite               DCMTK
-        |                 DICOM
-        |
-        v
-Patient -> Study -> Image
-                    |
-                    v
-             Python analysis
-                    |
-                    v
-              K-Means result
-```
+The React frontend communicates with the C++ server through HTTP requests. The server handles database operations, DICOM metadata and image requests, while image analysis is performed by the Python processing pipeline.
+
+<p align="center">
+  <img src="docs/images/architecture-diagram.png" alt="System architecture diagram" width="850">
+</p>
 
 SQLite stores the patient, study, user and image records. Uploaded image files are stored on disk, while their paths and study relationships are stored in the database.
 
@@ -340,6 +311,14 @@ Images can be uploaded and analysed from the web interface.
 
 The current implementation converts the image to grayscale and uses K-Means clustering to group the pixels into three intensity clusters.
 
+<p align="center">
+  <img src="docs/images/image-analysis.png" alt="K-Means medical image analysis interface" width="900">
+</p>
+
+<p align="center">
+  <em>Original image and K-Means segmentation result shown in the web interface.</em>
+</p>
+
 An example result could contain:
 
 ```text
@@ -395,7 +374,6 @@ Tools used during development include:
 - Docker
 - GitHub Actions
 - Linux / WSL
-- AI tools for development support, debugging and code review
 
 AI tools were used as development aids during the project.
 
