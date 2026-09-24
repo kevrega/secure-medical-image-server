@@ -1,68 +1,87 @@
 # Roadmap
 
-This project will be developed step by step, starting with the core C++ backend.
+This project is being developed step by step, starting with the core C++ backend and expanding into medical image handling, analysis and a web interface.
 
 ## Phase 1 - Core C++ Backend 🗹
 
 - Set up the project structure
 - Build the main C++ application
-- Add basic classes for users, patients and studies
+- Add user, patient and study classes
 - Add file handling
 - Use CMake for building the project
 
-## Phase 2-9 - Testing 🗹
+## Phase 2-10 - Testing 🗹
 
-- Add unit tests
-- Add integration tests
+- Add unit and integration tests
+- Test database operations
+- Test DICOM metadata handling
 - Improve error handling
-- Add static analysis
+- Run tests with CTest
 
 ## Phase 3 - Database 🗹
 
-- Add SQL database support
-- Store users, patients and study information
-- Add basic create, read, update and delete operations
+- Add SQLite support
+- Store users, patients and studies
+- Add CRUD operations
+- Link patients to studies
+- Link uploaded images to studies
 
 ## Phase 4 - Networking 🗹
 
-- Build a client-server structure
-- Add TCP socket communication
-- Add a REST API
-- Handle requests between the server and clients
+- Build a TCP server
+- Add REST API endpoints
+- Support GET, POST, PUT and DELETE requests
+- Handle binary image uploads
+- Add request size limits
 
 ## Phase 5 - Medical Image Support 🗹
 
-- Add DICOM support
-- Import medical images
-- Read image metadata
-- Store study and image information
-- Add basic image retrieval
+- Add DICOM support with DCMTK
+- Import patient and study metadata
+- Upload PNG, JPG, JPEG and DICOM files
+- Store image information
+- List images belonging to a study
+- Re-open and delete stored images
+- Read DICOM pixel data
 
 ## Phase 6 - Multithreading 🗹
 
-- Allow multiple clients to connect
-- Add thread-safe operations
-- Handle multiple requests at the same time
+- Handle multiple clients at the same time
+- Use separate database connections for client threads
+- Add SQLite busy handling
+- Support concurrent requests
 
 ## Phase 7 - Security 🗹
 
-- Add user authentication
-- Add user roles and permissions
-- Validate input
-- Add audit logging
-- Improve secure handling of data
+- API key authentication
+- API key stored in an environment variable
+- Input and filename validation
+- Request size validation
+- Study and image relationship validation
 
-## Phase 8 - CI/CD and Docker 🗹
+## Phase 8 - CI and Docker 🗹
 
 - Set up GitHub Actions
-- Run tests automatically
 - Build the project automatically
+- Run tests automatically
 - Add Docker support
 
-## Phase 9 - Web Interface ☐
+## Phase 9 - Web Interface 🗹
 
-- Create a simple web interface
-- Search for patients and studies
-- View study information
-- Display medical images
-- Connect the interface to the backend API
+- Create a React and Vite frontend
+- Add a dashboard
+- Manage patients, studies and users
+- Import DICOM metadata
+- Upload and browse study images
+- Analyse and delete uploaded images
+- Show backend connection status
+
+## Phase 10 - Image Analysis 🗹
+
+- Add Python-based image processing
+- Load DICOM, PNG and JPEG images
+- Convert images to grayscale
+- Add K-Means segmentation
+- Display original and segmented images
+- Show cluster centers and pixel counts
+- Add a built-in CT demo
